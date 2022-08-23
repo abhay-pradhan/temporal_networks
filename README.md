@@ -11,20 +11,23 @@ You can find more information about the visualization and the corresponding scri
 
 
 # Python
-
-
 Ensure you active venv/ and please install the following (inside a venv)
 
+```
 python3 -m venv venv
 source venv/bin/activate
 pip install igraph
 pip install pandas
 pip install pycairo
-
+```
 ## Running it
+Follow these steps
+
+```
 mkdir animation
 python preferentialattachment.py
 ./generate-anim.sh
+```
 
 ## Results
 check animation/ folder and delete it between runs. Note, there is a small dataset for testing as well as a the larger one
