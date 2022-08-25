@@ -31,3 +31,11 @@ python preferentialattachment.py
 
 ## Results
 check animation/ folder and delete it between runs. Note, there is a small dataset for testing as well as a the larger one
+
+
+## Next Stage things to do
+
+### Configuration
+1. Initial simulation start date. timestep. integer. 
+2. Per bucket, (src, dest)
+3. cut off size
