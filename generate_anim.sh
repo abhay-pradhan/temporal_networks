@@ -7,4 +7,4 @@ if [ -f $FILE ]; then
 	rm $FILE
 fi
 
-ffmpeg -i animation/example%d.png -c:v libx264 -pix_fmt yuv420p $FILE
+ffmpeg -framerate 5 -i animation/example%d.png -c:v libx264 -pix_fmt yuv420p $FILE

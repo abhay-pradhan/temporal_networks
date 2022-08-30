@@ -36,6 +36,13 @@ check animation/ folder and delete it between runs. Note, there is a small datas
 ## Next Stage things to do
 
 ### Configuration
-1. Initial simulation start date. timestep. integer. 
+1. Initial simulation start_timestep. end_timestep. bucket_size 
 2. Per bucket, (src, dest)
 3. cut off size
+
+### Algorithm
+* Read configuration
+* Read input data upto end_timestep
+* bucket per bucket_size
+* construct graph for that timestep by filtering upto the timestep, exploding and plotting
+* repeat till end. 
