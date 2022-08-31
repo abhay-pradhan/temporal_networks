@@ -2,9 +2,12 @@ import pandas as pd
 import igraph
 import configparser
 import pycountry
+from progress.bar import Bar
+from progress.spinner import MoonSpinner
+
 
 G7 = ['United States', 'United Kingdom', 'Germany', 'France', 'Japan', 'Italy','Canada']
-BRICS =  ['China', 'Brazil', ' India', 'South Africa', 'Russia']
+BRICS =  ['China', 'Brazil', 'India', 'South Africa', 'Russia']
 
 def get_color(country):
     if country in G7:
@@ -60,12 +63,13 @@ def get_country(name):
 
 
 def format_graph(graph, country_label: False):
+    g_copy = graph.copy()
     if country_label:
-        graph.vs['label'] = [get_country(name) for name in graph.vs['name']]
+        g_copy.vs['label'] = [get_country(name) for name in g_copy.vs['name']]
 
-    graph.vs['color'] = [get_color(x) for x in graph.vs['name']]
-    graph.vs["size"]  = igraph.rescale(graph.betweenness(), (10, 50))
-    return graph
+    g_copy.vs['color'] = [get_color(x) for x in g_copy.vs['name']]
+    g_copy.vs["size"]  = igraph.rescale(g_copy.betweenness(), (10, 50))
+    return g_copy
 
 
 def bucket_df(df, df_col, bucket_sz):
@@ -77,17 +81,28 @@ def bucket_df(df, df_col, bucket_sz):
 def construct_graph(original_graph, bucketed_df, df_col, country_label):
     old_layout = original_graph.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid')
     n = 1
-    for idx, row in bucketed_df.iterrows():
-        last_ts_per_bucket = row[df_col][-1]
-        g = delete_edges(original_graph, last_ts_per_bucket)
-        new_layout = g.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid', seed=old_layout)
-        gg = format_graph(delete_vertices(g, last_ts_per_bucket), country_label)
-        tgt = f'{output_folder}/example{n}.png'
-        print(tgt)
-        igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,900))
-        old_layout = new_layout.copy()
-        n += 1
+    with MoonSpinner('Generating graph...') as bar:
+        for idx, row in bucketed_df.iterrows():
+            last_ts_per_bucket = row[df_col][-1]
+            g = delete_edges(original_graph, last_ts_per_bucket)
+            new_layout = g.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid', seed=old_layout)
+            gg = format_graph(delete_vertices(g, last_ts_per_bucket), country_label)
+            tgt = f'{output_folder}/example{n}.png'
+            igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,900))
+            old_layout = new_layout.copy()
+            n += 1
+            bar.next()
 
+
+def generate_betweenness_timeseries(original_graph, df, df_col):
+    ret_df = pd.DataFrame()
+    with Bar('Generating betweenness...', max=max(df[df_col])) as bar:
+        for ts in df[df_col]:
+            g = delete_vertices(delete_edges(original_graph, ts), ts)
+            df = pd.DataFrame([igraph.rescale(g.betweenness(), (0.1, 1))], columns=[v['name'] for v in g.vs], index=[ts])
+            ret_df = ret_df.append(df)
+            bar.next()
+        return ret_df
 
 cfg = load_config("config.ini")
 
@@ -101,18 +116,22 @@ bucket_sz = int(get_config(cfg, 'Simulation', 'bucket_size'))
 
 country_label = True if cfg['Format']['country_label'] == 'True' else False
 
+
 print(f'Reading from {data_file} with timestep column name {df_col} start_timestep {start_ts}, end_timestep {end_ts} and bucket_size {bucket_sz} and writing to output_folder {output_folder} with country_labels: {country_label}')
 df, original_graph, total_time = load_dataframe(data_file, df_col, end_ts)
 print(f'total simulation time is {total_time}')
 
-bucketed_df= bucket_df(df, df_col, bucket_sz)
-construct_graph(original_graph, bucketed_df, df_col, country_label)
+run_animation = True if cfg['Workflow']['run_animation'] == 'True' else False
+run_betweenness = True if cfg['Workflow']['run_betweenness'] == 'True' else False
 
+if run_animation:
+    bucketed_df= bucket_df(df, df_col, bucket_sz)
+    construct_graph(original_graph, bucketed_df, df_col, country_label)
 
-
-#
-#def construct_graph_per_bucketed_ts(bucketed_df, df_col, ts, old_layout = None):
-#    filtered_df = bucketed_df[bucketed_df[df_col].apply(lambda x: (x[-1] < ts) or (ts in x))]
-#    graph = igraph.Graph.DataFrame(filtered_df, directed=False, use_vids=True)
-#    layout = graph.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid', seed=old_layout)
-#    return graph, layout
+if run_betweenness:
+    between_df = generate_betweenness_timeseries(original_graph, df, df_col)
+    g7_betweenness_df = between_df[G7]
+    bric_betweenness_df = between_df[BRICS]
+    between_df.to_csv('betweenness.csv')
+    g7_betweenness_df.to_csv('g7_betweenness.csv')
+    bric_betweenness_df.to_csv('bric_betweenness.csv')

@@ -19,32 +19,17 @@ source venv/bin/activate
 pip install igraph
 pip install pandas
 pip install pycairo
+pip install matplotlib
 pip install pycountry
+pip install progress
 ```
 
 ## Running it
-Follow these steps
+Look at the script generate-anim.sh. It encapsulates the commands. Please make sure you run it inside the venv
 
 ```
-mkdir animation
-python preferentialattachment.py
 ./generate-anim.sh
 ```
 
 ## Results
 check animation/ folder and delete it between runs. Note, there is a small dataset for testing as well as a the larger one
-
-
-## Next Stage things to do
-
-### Configuration
-1. Initial simulation start_timestep. end_timestep. bucket_size 
-2. Per bucket, (src, dest)
-3. cut off size
-
-### Algorithm
-* Read configuration
-* Read input data upto end_timestep
-* bucket per bucket_size
-* construct graph for that timestep by filtering upto the timestep, exploding and plotting
-* repeat till end. 
