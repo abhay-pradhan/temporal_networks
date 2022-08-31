@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# check if directory exists
+ANIM_DIR="./animation"
+
+if [ -d $ANIM_DIR ]; then
+	rm -f $ANIM_DIR/*
+else
+	mkdir $ANIM_DIR
+fi
+
+# generate the images
+python preferentialattachment.py
+
 FILE="fr-anim.mp4"
 
 if [ -f $FILE ]; then

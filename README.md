@@ -19,7 +19,9 @@ source venv/bin/activate
 pip install igraph
 pip install pandas
 pip install pycairo
+pip install pycountry
 ```
+
 ## Running it
 Follow these steps
 

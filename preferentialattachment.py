@@ -1,23 +1,35 @@
 import pandas as pd
 import igraph
 import configparser
+import pycountry
+
+G7 = ['United States', 'United Kingdom', 'Germany', 'France', 'Japan', 'Italy','Canada']
+BRICS =  ['China', 'Brazil', ' India', 'South Africa', 'Russia']
+
+def get_color(country):
+    if country in G7:
+        return 'blue'
+    elif country in BRICS:
+        return 'red'
+    else:
+        return 'yellow'
 
 
 def load_dataframe(data_file, df_col, end_timestep):
-    df = pd.read_csv(data_file)[lambda x: x[df_col] < end_timestep]
-    tt = max(df[df_col])
-    original_graph = igraph.Graph.DataFrame(df, directed=False, use_vids=True)
-    return df, original_graph, tt
+    df = pd.read_csv(data_file)
+    df['timestep'] = df.index
+    ret_df = df[df[df_col] < end_timestep]
+    original_graph = igraph.Graph.DataFrame(ret_df, directed=False)
+    tt = max(ret_df[df_col])
+    return ret_df, original_graph, tt
 
 
-# makes a copy of the graph, deletes edges greater than time t and returns the graph
 def delete_edges(g, t):
     g_copy = g.copy()
-    g_copy.delete_edges(time_gt=t)
+    g_copy.delete_edges(timestep_gt=t)
     return g_copy
 
 
-# makes a copy of the graph, deletes vertices with no edges and returns the graph
 def delete_vertices(g, t):
     g_copy = g.copy()
     to_delete_ids = [v.index for v in g_copy.vs if v.degree() == 0]
@@ -38,20 +50,38 @@ def get_config(cfg, section, key):
         print(f'section {section} or key {key} not found')
 
 
+def get_country(name):
+    print(f'Getting country code for {name}')
+    try:
+        code = pycountry.countries.get(name=name).alpha_2
+        return code
+    except:
+        return name
+
+
+def format_graph(graph, country_label: False):
+    if country_label:
+        graph.vs['label'] = [get_country(name) for name in graph.vs['name']]
+
+    graph.vs['color'] = [get_color(x) for x in graph.vs['name']]
+    graph.vs["size"]  = igraph.rescale(graph.betweenness(), (10, 50))
+    return graph
+
+
 def bucket_df(df, df_col, bucket_sz):
     interval = pd.interval_range(0, df[df_col].iat[-1], bucket_sz)
     bucketed = df.groupby(pd.cut(df[df_col], bins=interval, right=True)).agg(lambda x: list(x))
     return bucketed
 
 
-def construct_graph(original_graph, bucketed_df, df_col):
+def construct_graph(original_graph, bucketed_df, df_col, country_label):
     old_layout = original_graph.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid')
     n = 1
     for idx, row in bucketed_df.iterrows():
         last_ts_per_bucket = row[df_col][-1]
         g = delete_edges(original_graph, last_ts_per_bucket)
         new_layout = g.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid', seed=old_layout)
-        gg = delete_vertices(g, last_ts_per_bucket)
+        gg = format_graph(delete_vertices(g, last_ts_per_bucket), country_label)
         tgt = f'{output_folder}/example{n}.png'
         print(tgt)
         igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,900))
@@ -59,7 +89,6 @@ def construct_graph(original_graph, bucketed_df, df_col):
         n += 1
 
 
-# load configuration from a config.ini file present in current directory
 cfg = load_config("config.ini")
 
 data_file = get_config(cfg, 'Data', 'data_file')
@@ -70,9 +99,20 @@ start_ts = int(get_config(cfg, 'Simulation', 'start_timestep'))
 end_ts = int(get_config(cfg, 'Simulation', 'end_timestep'))
 bucket_sz = int(get_config(cfg, 'Simulation', 'bucket_size'))
 
-print(f'Reading from {data_file} with timestep column name {df_col} start_timestep {start_ts}, end_timestep {end_ts} and bucket_size {bucket_sz} and writing to output_folder {output_folder}')
+country_label = True if cfg['Format']['country_label'] == 'True' else False
+
+print(f'Reading from {data_file} with timestep column name {df_col} start_timestep {start_ts}, end_timestep {end_ts} and bucket_size {bucket_sz} and writing to output_folder {output_folder} with country_labels: {country_label}')
 df, original_graph, total_time = load_dataframe(data_file, df_col, end_ts)
 print(f'total simulation time is {total_time}')
 
 bucketed_df= bucket_df(df, df_col, bucket_sz)
-construct_graph(original_graph, bucketed_df, df_col)
+construct_graph(original_graph, bucketed_df, df_col, country_label)
+
+
+
+#
+#def construct_graph_per_bucketed_ts(bucketed_df, df_col, ts, old_layout = None):
+#    filtered_df = bucketed_df[bucketed_df[df_col].apply(lambda x: (x[-1] < ts) or (ts in x))]
+#    graph = igraph.Graph.DataFrame(filtered_df, directed=False, use_vids=True)
+#    layout = graph.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid', seed=old_layout)
+#    return graph, layout
