@@ -104,6 +104,12 @@ def generate_betweenness_timeseries(original_graph, df, df_col):
             bar.next()
         return ret_df
 
+
+def plot_and_save(df, filename):
+    df_fig = df.plot().get_figure()
+    df_fig.savefig(filename)
+
+
 cfg = load_config("config.ini")
 
 data_file = get_config(cfg, 'Data', 'data_file')
@@ -130,8 +136,12 @@ if run_animation:
 
 if run_betweenness:
     between_df = generate_betweenness_timeseries(original_graph, df, df_col)
-    g7_betweenness_df = between_df[G7]
-    bric_betweenness_df = between_df[BRICS]
     between_df.to_csv('betweenness.csv')
+
+    g7_betweenness_df = between_df[G7]
     g7_betweenness_df.to_csv('g7_betweenness.csv')
-    bric_betweenness_df.to_csv('bric_betweenness.csv')
+    plot_and_save(g7_betweenness_df, f'{output_folder}/g7.png'}
+
+    brics_betweenness_df = between_df[BRICS]
+    brics_betweenness_df.to_csv('brics_betweenness.csv')
+    plot_and_save(g7_betweenness_df, f'{output_folder}/brics.png'}
