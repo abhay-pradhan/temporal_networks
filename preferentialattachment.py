@@ -88,7 +88,7 @@ def construct_graph(original_graph, bucketed_df, df_col, country_label):
             last_ts_per_bucket = row[df_col][-1]
             g = delete_edges(original_graph, last_ts_per_bucket)
             new_layout = g.layout_fruchterman_reingold(niter=10, start_temp=0.05, grid='nogrid', seed=old_layout)
-            gg = format_graph(delete_vertices(g, last_ts_per_bucket), country_label)
+            gg = format_graph(delete_vertices(g), country_label)
             tgt = f'{output_folder}/example{n}.png'
             igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,900))
             old_layout = new_layout.copy()
