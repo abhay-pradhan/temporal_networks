@@ -22,6 +22,7 @@ pip install pycairo
 pip install matplotlib
 pip install pycountry
 pip install progress
+pip install -U "ray[default]"
 ```
 
 ## Running it
