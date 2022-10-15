@@ -1,11 +1,11 @@
-import pandas as pd
-import igraph
 import configparser
+
+import igraph
+import pandas as pd
 import pycountry
 import ray
-from progress.bar import Bar
-from progress.spinner import MoonSpinner
 from matplotlib.colors import LinearSegmentedColormap
+from progress.spinner import MoonSpinner
 
 
 def load_config(config_file):
@@ -58,14 +58,13 @@ def load_dataframe(data_file, ts_col, cols_to_load, end_timestep):
     df = df[cols_to_load]
     df[ts_col] = df.index
     ret_df = df[df[ts_col] < end_timestep]
-    ret_df = filter_dataframe(ret_df, ts_col, 2)
-    original_graph = igraph.Graph.DataFrame(ret_df, directed=False)
     tt = max(ret_df[ts_col])
-    return ret_df, original_graph, tt
+    return ret_df, tt
 
 
-def filter_dataframe(df, ts_col, num_to_pick):
+def filter_dataframe(df, ts_col, from_countries, num_to_pick):
     drop_df = df.drop_duplicates(subset=['FromCty', 'ToCty'], keep='first')
+    drop_df = drop_df[drop_df['FromCty'].isin(from_countries)]
     drop_df = drop_df.reset_index(drop=True)
     drop_df[ts_col] = drop_df.index
     grouped_df = drop_df.groupby(['FromCty'], as_index=False, sort=False).agg(lambda to: list(to))
@@ -97,20 +96,13 @@ def delete_vertices(g):
 cmap2 = LinearSegmentedColormap.from_list("edge_cmap", ["lightblue", "midnightblue"])
 
 
-def get_size(graph):
-    sz = []
-    for vs in graph.vs:
-        name = vs['name']
-        if (name in G7) or (name in BRICS):
-            btwn = vs.betweenness()
-            print(f'betweeness {btwn} for {name}')
-            if btwn:
-                sz.append(igraph.rescale(vs.betweenness(), (50, 100)))
-            else:
-                sz.append(10.0)
-        else:
-            sz.append(10.0)
-    return sz
+def get_sz(name):
+    if name in G7:
+        return 60
+    elif name in BRICS:
+        return 40
+    else:
+        return 20
 
 
 def format_graph(graph, country_label: False):
@@ -121,11 +113,10 @@ def format_graph(graph, country_label: False):
 
     g_copy.vs['color'] = [get_color(x) for x in g_copy.vs['name']]
 
-#    g_copy.vs["size"] = get_size(g_copy)
-
-    vs_betweenness = g_copy.betweenness()
-    if vs_betweenness:
-        g_copy.vs["size"]  = igraph.rescale(vs_betweenness, (30, 80))
+    #vs_betweenness = g_copy.betweenness()
+    #if vs_betweenness:
+    #    g_copy.vs["size"]  = igraph.rescale(vs_betweenness, (30, 80))
+    g_copy.vs['size'] = [get_sz(name) for name in g_copy.vs['name']]
 
     edge_betweenness = g_copy.edge_betweenness()
     if edge_betweenness:
@@ -142,7 +133,8 @@ def bucket_df(df, ts_col, bucket_sz):
     return bucketed
 
 
-def construct_graph(original_graph, layout, bucketed_df, ts_col, country_label):
+def construct_graph(layout, bucketed_df, ts_col, country_label):
+    original_graph = igraph.Graph.DataFrame(bucketed_df, directed=False)
     old_layout = original_graph.layout(layout)
     n = 1
     with MoonSpinner('Generating graph...') as bar:
@@ -152,27 +144,25 @@ def construct_graph(original_graph, layout, bucketed_df, ts_col, country_label):
             new_layout = g.layout(layout, seed=old_layout)
             gg = format_graph(delete_vertices(g), country_label)
             tgt = f'{output_folder}/example{n}.png'
-            igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,900))
+            igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,1200))
             old_layout = new_layout.copy()
             n += 1
             bar.next()
 
 
-def construct_filtered_graph(original_graph, layout, df, ts_col, max_ts, country_label):
-#    old_layout = original_graph.layout(layout, niter=1000, start_temp=0.01, grid='nogrid')
-    old_layout = original_graph.layout(layout)
+def construct_filtered_graph(layout, df, country_label):
+    original_graph = igraph.Graph.DataFrame(df, directed=False)
+    old_layout = original_graph.layout(layout, niter=1000, start_temp=0.01, grid='nogrid')
     n = 1
-    xs = (x / 10 for x in range(0, max_ts * 10))
-#    xs = range(1, max_ts)
+    sz = len(ret_df.index)
+    xs = (x / 10 for x in range(0, sz * 10))
     for i in xs:
         g = delete_edges(original_graph, i)
-        #new_layout = g.layout(layout, niter=1000, seed=old_layout, start_temp=0.01, grid='nogrid')
-        new_layout = g.layout(layout, seed=old_layout)
+        new_layout = g.layout(layout, niter=1000, seed=old_layout, start_temp=0.01, grid='nogrid')
         gg = format_graph(delete_vertices(g), country_label)
         n = int(i*10)
-        #n = int(i*1)
         tgt = f'{output_folder}/example{n}.png'
-        igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,900))
+        igraph.plot(gg, layout=new_layout, target=tgt, bbox=(1600,900), margin=50)
         old_layout = new_layout.copy()
         n += 1
 
@@ -250,8 +240,8 @@ country_label: {country_label}
 '''
 print(str)
 
-cols_to_load = ['FromCty', 'ToCty', 'Year', 'Quarter']
-df, original_graph, total_time = load_dataframe(data_file, ts_col, cols_to_load, end_ts)
+cols_to_load = ['FromCty', 'ToCty']
+df, total_time = load_dataframe(data_file, ts_col, cols_to_load, end_ts)
 
 print(f'total simulation time is {total_time}')
 
@@ -263,17 +253,19 @@ run_degree = True if cfg['Workflow']['run_degree'] == 'True' else False
 if run_animation:
     if is_bucketed:
         bucketed_df= bucket_df(df, ts_col, bucket_sz)
-        construct_graph(original_graph, layout_name, bucketed_df, ts_col, country_label)
+        construct_graph(layout_name, bucketed_df, ts_col, country_label)
     else:
-        construct_filtered_graph(original_graph, layout_name, df, ts_col, total_time, country_label)
+        from_countries = set(G7 + BRICS)
+        ret_df = filter_dataframe(df, ts_col, from_countries, 8)
+        construct_filtered_graph(layout_name, ret_df, country_label)
 
 
 if run_degree:
-    filtered_df = filter_betweenness(df, 2018)
-    filtered_df = filtered_df.reset_index(drop=True)
-    filtered_df['timestep']=filtered_df.index
-    print(len(filtered_df))
-    degree_out_df = generate_degree_timeseries(original_graph, filtered_df, ts_col)
+#    filtered_df = filter_betweenness(df, 2018)
+#    filtered_df = filtered_df.reset_index(drop=True)
+#    filtered_df['timestep']=filtered_df.index
+#    print(len(filtered_df))
+    degree_out_df = generate_degree_timeseries(original_graph, df, ts_col)
     G7.append('China')
     g7_degree_out_df = degree_out_df[G7]
     g7_degree_out_df.to_csv('g7_degree.csv')
@@ -287,11 +279,12 @@ if run_degree:
 
 if run_betweenness:
     ray.init()
-    filtered_df = filter_betweenness(df, 2018)
-    filtered_df = filtered_df.reset_index(drop=True)
-    filtered_df['timestep']=filtered_df.index
-    print(len(filtered_df))
-    between_df = generate_betweenness_timeseries(original_graph, filtered_df, ts_col)
+#    filtered_df = filter_betweenness(df, 2018)
+#    filtered_df = filtered_df.reset_index(drop=True)
+#    filtered_df['timestep']=filtered_df.index
+#    print(len(filtered_df))
+#    between_df = generate_betweenness_timeseries(original_graph, filtered_df, ts_col)
+    between_df = generate_betweenness_timeseries(original_graph, df, ts_col)
     between_df.to_csv('betweenness.csv')
 
     G7.append('China')
