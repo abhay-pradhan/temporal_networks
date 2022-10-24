@@ -235,7 +235,7 @@ start_timestep: {start_ts},
 end_timestep: {end_ts},
 is_bucketed: {is_bucketed},
 bucket_sz: {bucket_sz}, and 
-writing to: {output_folder} with 
+writing to folder: {output_folder} 
 country_label: {country_label}
 '''
 print(str)
